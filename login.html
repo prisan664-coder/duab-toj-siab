@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hukhujai App - Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-4">
+                <div class="card shadow-sm p-4">
+                    <h3 class="text-center mb-3">Login</h3>
+                    <input type="email" id="email" class="form-control mb-2" placeholder="Email">
+                    <input type="password" id="password" class="form-control mb-3" placeholder="Password">
+                    <button class="btn btn-primary w-100 mb-2" id="loginBtn">Login</button>
+                    <p class="text-center">No account? <a href="register.html">Register here</a></p>
+                    <p class="text-center"><a href="admin-login.html">Please login with your account</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCE_qqKanTTdVXYwBMBIfPu0M0Xy-kbX8",
+            authDomain: "hujai-web.firebaseapp.com",
+            databaseURL: "https://hujai-web-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "hujai-web",
+            storageBucket: "hujai-web.firebasestorage.app",
+            messagingSenderId: "827968973337",
+            appId: "1:827968973337:web:ae6ef630b59cf429575888",
+            measurementId: "G-XCF3TBNG8L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth();
+
+        document.getElementById("loginBtn").addEventListener("click", () => {
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value.trim();
+            if (!email || !password) return alert("Please fill all fields");
+
+            signInWithEmailAndPassword(auth, email, password)
+                .then(() => window.location.href = "index.html")
+                .catch(err => alert(err.message));
+        });
+    </script>
+</body>
+
+</html>

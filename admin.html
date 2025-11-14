@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hukhujai Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+
+    <!-- 🔹 Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-danger shadow">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">🛠 Hukhujai Admin</a>
+            <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div id="navbarNav" class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="index.html">🏠 หน้าแรก</a></li>
+                    <li class="nav-item"><a class="nav-link" href="Admin2.html">💬 ดูแลลูกค้า</a></li>
+                    <li class="nav-item"><a class="nav-link text-warning" href="#" id="logoutBtn">🚪 ออกจากระบบ</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 🔹 Header -->
+    <header class="bg-white py-4 shadow-sm mb-4">
+        <div class="container text-center">
+            <h1 class="fw-bold text-danger">ระบบจัดการ Hukhujai App</h1>
+            <p class="text-muted">เฉพาะผู้ดูแลระบบเท่านั้น</p>
+        </div>
+    </header>
+
+    <!-- 🔹 Manage Members -->
+    <main class="container mb-5">
+        <h4 class="fw-bold text-primary mb-3">👥 จัดการสมาชิก</h4>
+        <table class="table table-striped table-hover shadow-sm bg-white">
+            <thead class="table-primary">
+                <tr>
+                    <th>#</th>
+                    <th>ชื่อผู้ใช้</th>
+                    <th>อีเมล</th>
+                    <th>รหัสผ่าน</th>
+                    <th>วันที่สมัคร</th>
+                    <th>IP Address</th>
+                    <th>การจัดการ</th>
+                </tr>
+            </thead>
+            <tbody id="userTable"></tbody>
+        </table>
+
+        <!-- 🔹 Manage Posts -->
+        <h4 class="fw-bold text-success mt-5 mb-3">📝 จัดการโพสต์</h4>
+        <div class="card shadow mb-3">
+            <div class="card-body">
+                <input type="text" id="postTitle" class="form-control mb-2" placeholder="หัวข้อโพสต์">
+                <textarea id="postContent" class="form-control mb-2" rows="3" placeholder="เนื้อหาโพสต์"></textarea>
+                <input type="url" id="postImage" class="form-control mb-2" placeholder="URL รูปภาพ (https://...)">
+                <button class="btn btn-success" id="addPostBtn">➕ เพิ่มโพสต์</button>
+            </div>
+        </div>
+        <div id="postList" class="mb-5"></div>
+    </main>
+
+    <!-- Modal รายงานโพสต์ -->
+    <div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reportModalLabel">รายงานโพสต์</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="reportContent"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔹 Firebase Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+        import { getDatabase, ref, onValue, set, push, remove, update, get } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCE_qqKanTTdVXYwBMBIfPu0M0Xy-kbX8",
+            authDomain: "hujai-web.firebaseapp.com",
+            databaseURL: "https://hujai-web-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "hujai-web",
+            storageBucket: "hujai-web.firebasestorage.app",
+            messagingSenderId: "827968973337",
+            appId: "1:827968973337:web:ae6ef630b59cf429575888",
+            measurementId: "G-XCF3TBNG8L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        const ADMIN_EMAIL = "admin@hukhujai.com";
+
+        const userTable = document.getElementById("userTable");
+        const postList = document.getElementById("postList");
+        const addPostBtn = document.getElementById("addPostBtn");
+        const postTitle = document.getElementById("postTitle");
+        const postContent = document.getElementById("postContent");
+        const postImage = document.getElementById("postImage");
+
+        let userData = {};
+
+        // ตรวจสอบสิทธิ์ก่อนเข้า
+        onAuthStateChanged(auth, (user) => {
+            if (!user) { alert("กรุณาเข้าสู่ระบบก่อน!"); window.location.href = "admin-login.html"; return; }
+            if (user.email !== ADMIN_EMAIL) { alert("คุณไม่มีสิทธิ์เข้าหน้านี้ ❌"); window.location.href = "index.html"; return; }
+
+            // โหลดสมาชิก
+            const usersRef = ref(db, "users/");
+            onValue(usersRef, async (snapshot) => {
+                userTable.innerHTML = "";
+                const data = snapshot.val();
+                if (data) {
+                    userData = data;
+                    let index = 1;
+                    for (const [uid, info] of Object.entries(data)) {
+                        const password = info.password || "-";
+                        const createdAt = info.createdAt || "-";
+                        const ipAddress = info.ip || "-";
+
+                        userTable.innerHTML += `
+                        <tr>
+                            <td>${index++}</td>
+                            <td>${info.name || "-"}</td>
+                            <td>${info.email}</td>
+                            <td>${password}</td>
+                            <td>${createdAt}</td>
+                            <td>${ipAddress}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning" onclick="editUser('${uid}')">แก้ไข</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteUser('${uid}')">ลบ</button>
+                                <button class="btn btn-sm btn-info" onclick="sendPassword('${uid}')">ส่งรหัส</button>
+                            </td>
+                        </tr>`;
+                    }
+                } else {
+                    userTable.innerHTML = `<tr><td colspan="7" class="text-center text-muted">ไม่มีข้อมูลสมาชิก</td></tr>`;
+                }
+            });
+
+            // โหลดโพสต์
+            const postsRef = ref(db, "posts/");
+            onValue(postsRef, snapshot => {
+                postList.innerHTML = "";
+                const data = snapshot.val();
+                if (data) {
+                    Object.entries(data).reverse().forEach(([id, post]) => {
+                        const reportCount = post.reports ? Object.keys(post.reports).length : 0;
+                        postList.innerHTML += `
+                        <div class="card shadow mb-3">
+                            <div class="card-body">
+                                <input type="text" value="${post.title}" class="form-control mb-2" id="title-${id}">
+                                <textarea class="form-control mb-2" rows="2" id="content-${id}">${post.content}</textarea>
+                                <input type="url" class="form-control mb-2" value="${post.imageURL}" id="image-${id}">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <div>
+                                        <button class="btn btn-warning btn-sm" onclick="updatePost('${id}')">💾 แก้ไข</button>
+                                        <button class="btn btn-danger btn-sm" onclick="deletePost('${id}')">🗑 ลบ</button>
+                                    </div>
+                                    <div>
+                                        <span class="badge bg-danger">รายงาน ${reportCount}</span>
+                                        <button class="btn btn-sm btn-info" onclick="viewReports('${id}')">ดูรายงาน</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                } else {
+                    postList.innerHTML = `<p class="text-center text-muted">ยังไม่มีโพสต์</p>`;
+                }
+            });
+        });
+
+        // ฟังก์ชันจัดการ
+        window.editUser = async (uid) => {
+            const userRef = ref(db, "users/" + uid);
+            const snapshot = await get(userRef);
+            if (!snapshot.exists()) return alert("ไม่พบข้อมูลสมาชิก");
+            const data = snapshot.val();
+
+            const name = prompt("ชื่อผู้ใช้:", data.name || "");
+            if (name === null) return;
+            const email = prompt("อีเมล:", data.email || "");
+            if (email === null) return;
+            const password = prompt("รหัสผ่าน:", data.password || "");
+            if (password === null) return;
+
+            update(userRef, { name, email, password }).then(() => alert("✅ แก้ไขข้อมูลสมาชิกเรียบร้อยแล้ว"));
+        }
+
+        window.deleteUser = async (uid) => {
+            if (confirm("แน่ใจหรือไม่ว่าต้องการลบสมาชิกนี้?")) {
+                await remove(ref(db, "users/" + uid));
+                alert("ลบสมาชิกเรียบร้อยแล้ว ✅");
+            }
+        }
+
+        window.sendPassword = async (uid) => {
+            const userRef = ref(db, "users/" + uid);
+            const snapshot = await get(userRef);
+            if (!snapshot.exists()) return alert("ไม่พบข้อมูลสมาชิก");
+            const password = snapshot.val().password || "-";
+            alert(`รหัสผ่านของสมาชิก: ${password}`);
+        }
+
+        addPostBtn.addEventListener("click", () => {
+            const title = postTitle.value.trim();
+            const content = postContent.value.trim();
+            const imageURL = postImage.value.trim();
+            if (!title || !content || !imageURL) return alert("กรอกข้อมูลให้ครบทุกช่อง!");
+            const newPost = push(ref(db, "posts/"));
+            set(newPost, { title, content, imageURL, date: new Date().toLocaleString() })
+                .then(() => { postTitle.value = ""; postContent.value = ""; postImage.value = ""; alert("✅ เพิ่มโพสต์เรียบร้อยแล้ว"); });
+        });
+
+        window.updatePost = (id) => {
+            const title = document.getElementById(`title-${id}`).value.trim();
+            const content = document.getElementById(`content-${id}`).value.trim();
+            const imageURL = document.getElementById(`image-${id}`).value.trim();
+            if (!title || !content || !imageURL) return alert("กรอกข้อมูลให้ครบทุกช่อง!");
+            update(ref(db, "posts/" + id), { title, content, imageURL })
+                .then(() => alert("✅ แก้ไขโพสต์เรียบร้อยแล้ว"));
+        }
+
+        window.deletePost = (id) => {
+            if (confirm("แน่ใจว่าต้องการลบโพสต์นี้?")) remove(ref(db, "posts/" + id)).then(() => alert("✅ ลบโพสต์เรียบร้อยแล้ว"));
+        }
+
+        window.viewReports = async (postId) => {
+            const reportRef = ref(db, `posts/${postId}/reports`);
+            const snapshot = await get(reportRef);
+            const modalBody = document.getElementById("reportContent");
+            modalBody.innerHTML = "";
+
+            if (!snapshot.exists()) {
+                modalBody.innerHTML = `<p class="text-center text-muted">ยังไม่มีรายงานสำหรับโพสต์นี้</p>`;
+            } else {
+                const reports = snapshot.val();
+                const list = Object.entries(reports).map(([id, r], index) => {
+                    const userName = userData[r.userId]?.name || r.userId;
+                    return `<div class="mb-2"><strong>${index + 1}. ${userName}</strong> (${r.date}):<br>${r.reason}</div>`;
+                }).join("");
+                modalBody.innerHTML = list;
+            }
+
+            const reportModal = new bootstrap.Modal(document.getElementById("reportModal"));
+            reportModal.show();
+        }
+
+        // ออกจากระบบ
+        document.getElementById("logoutBtn").addEventListener("click", () => {
+            signOut(auth).then(() => window.location.href = "admin-login.html");
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

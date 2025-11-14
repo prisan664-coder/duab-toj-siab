@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hukhujai App - Profile</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="index.html">💙 Hukhujai App</a>
+            <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span
+                    class="navbar-toggler-icon"></span></button>
+            <div id="navbarNav" class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="index.html">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="profile.html">Profile</a></li>
+                    <li class="nav-item"><a class="nav-link" href="support.html">Support</a></li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="#" id="logoutBtn">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <header class="bg-white py-4 shadow-sm text-center">
+        <div>
+            <img id="profilePic" src="https://via.placeholder.com/100" class="rounded-circle mb-2" width="100"
+                height="100">
+            <h3 id="profileName">User</h3>
+            <div id="profileActions" class="mt-2">
+                <button class="btn btn-sm btn-outline-secondary" id="editProfileBtn">Edit Profile</button>
+                <button class="btn btn-sm btn-danger" id="deleteProfileBtn">Delete Profile</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Profile details + create post -->
+    <section class="container my-4">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card shadow p-3">
+                    <h5>ข้อมูลสมาชิก</h5>
+                    <p id="bioText" class="small text-muted"></p>
+                    <p><strong>งาน:</strong> <span id="jobText">-</span></p>
+                    <p><strong>บ้านเกิด:</strong> <span id="birthplaceText">-</span></p>
+                    <p><strong>ที่อยู่ปัจจุบัน:</strong> <span id="locationText">-</span></p>
+                    <p><strong>ประเทศ:</strong> <span id="countryText">-</span></p>
+                    <p><strong>สถานะ:</strong> <span id="statusText">-</span></p>
+                    <p><strong>การศึกษา:</strong> <span id="eduText">-</span></p>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card shadow p-3 mb-3">
+                    <h5>Create a new post</h5>
+                    <input type="text" id="postTitle" class="form-control mb-2" placeholder="Title">
+                    <textarea id="postContent" class="form-control mb-2" rows="3" placeholder="Content"></textarea>
+                    <input type="url" id="postImage" class="form-control mb-2" placeholder="Image URL (https://...)">
+                    <input type="url" id="postVideo" class="form-control mb-2"
+                        placeholder="Video URL (YouTube link or direct embed)">
+                    <button class="btn btn-success" id="createPostBtn">Post</button>
+                </div>
+
+                <h4 class="fw-bold text-primary mb-3">Your Posts</h4>
+                <div id="userPosts" class="row gy-4"></div>
+            </div>
+        </div>
+    </section>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut, deleteUser as firebaseDeleteUser } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+        import { getDatabase, ref, onValue, push, set, update, remove, get } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCE_qqKanTTdVXYwBMBIfPu0M0Xy-kbX8",
+            authDomain: "hujai-web.firebaseapp.com",
+            databaseURL: "https://hujai-web-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "hujai-web",
+            storageBucket: "hujai-web.firebasestorage.app",
+            messagingSenderId: "827968973337",
+            appId: "1:827968973337:web:ae6ef630b59cf429575888",
+            measurementId: "G-XCF3TBNG8L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+
+        let currentUser = null;
+        let userData = {};
+        let allUserPosts = [];
+
+        // DOM
+        const profilePic = document.getElementById("profilePic");
+        const profileName = document.getElementById("profileName");
+        const editProfileBtn = document.getElementById("editProfileBtn");
+        const deleteProfileBtn = document.getElementById("deleteProfileBtn");
+        const logoutBtn = document.getElementById("logoutBtn");
+
+        const bioText = document.getElementById("bioText");
+        const jobText = document.getElementById("jobText");
+        const birthplaceText = document.getElementById("birthplaceText");
+        const locationText = document.getElementById("locationText");
+        const countryText = document.getElementById("countryText");
+        const statusText = document.getElementById("statusText");
+        const eduText = document.getElementById("eduText");
+
+        const postTitle = document.getElementById("postTitle");
+        const postContent = document.getElementById("postContent");
+        const postImage = document.getElementById("postImage");
+        const postVideo = document.getElementById("postVideo");
+        const createPostBtn = document.getElementById("createPostBtn");
+        const userPosts = document.getElementById("userPosts");
+
+        // load all users minimal cache for names/photos
+        onValue(ref(db, "users/"), s => {
+            const d = s.val(); if (d) userData = d;
+            loadUserPosts();
+        });
+
+        onAuthStateChanged(auth, user => {
+            if (!user) window.location.href = "login.html";
+            currentUser = user;
+            update(ref(db, "users/" + currentUser.uid), { lastLogin: new Date().toLocaleString() });
+            loadProfile();
+            loadUserPosts();
+        });
+
+        function loadProfile() {
+            onValue(ref(db, "users/" + currentUser.uid), snapshot => {
+                const data = snapshot.val();
+                if (!data) return;
+                profileName.textContent = data.name || currentUser.email;
+                profilePic.src = data.photoURL || "https://via.placeholder.com/100";
+                // profile fields (optional)
+                bioText.textContent = data.bio || "";
+                jobText.textContent = data.job || "-";
+                birthplaceText.textContent = data.birthplace || "-";
+                locationText.textContent = data.location || "-";
+                countryText.textContent = data.country || "-";
+                statusText.textContent = data.status || "-";
+                eduText.textContent = data.education || "-";
+            });
+        }
+
+        // edit profile: show prompt form (simple)
+        editProfileBtn.addEventListener("click", async () => {
+            // create a small form sequence
+            const name = prompt("ชื่อที่แสดง:", profileName.textContent);
+            if (name === null) return;
+            const photo = prompt("URL ของรูปโปรไฟล์:", profilePic.src);
+            if (photo === null) return;
+            // bio (limit 101 chars)
+            const bio = prompt("Bio (ไม่เกิน 101 ตัวอักษร):", bioText.textContent || "");
+            if (bio === null) return;
+            if (bio.length > 101) return alert("Bio ยาวเกิน 101 ตัวอักษร");
+            const job = prompt("งาน (ไม่บังคับ):", jobText.textContent === "-" ? "" : jobText.textContent);
+            if (job === null) return;
+            const birthplace = prompt("บ้านเกิด (ไม่บังคับ):", birthplaceText.textContent === "-" ? "" : birthplaceText.textContent);
+            if (birthplace === null) return;
+            const location = prompt("ที่อยู่ปัจจุบัน (ไม่บังคับ):", locationText.textContent === "-" ? "" : locationText.textContent);
+            if (location === null) return;
+            const country = prompt("ประเทศ (ไม่บังคับ):", countryText.textContent === "-" ? "" : countryText.textContent);
+            if (country === null) return;
+            const status = prompt("สถานะ (เช่น โสด / แต่งงาน) :", statusText.textContent === "-" ? "" : statusText.textContent);
+            if (status === null) return;
+            const education = prompt("การศึกษา (เช่น ม.6 / ป.ตรี) และปี (ไม่บังคับ):", eduText.textContent === "-" ? "" : eduText.textContent);
+            if (education === null) return;
+
+            update(ref(db, "users/" + currentUser.uid), {
+                name, photoURL: photo, bio, job, birthplace, location, country, status, education
+            }).then(() => alert("✅ บันทึกข้อมูลโปรไฟล์เรียบร้อยแล้ว"));
+        });
+
+        // delete profile and own posts
+        deleteProfileBtn.addEventListener("click", () => {
+            if (!confirm("Are you sure to delete your profile and all your posts?")) return;
+            // remove user's posts
+            onValue(ref(db, "posts/"), snapshot => {
+                const posts = snapshot.val();
+                if (posts) Object.entries(posts).forEach(([id, p]) => { if (p.userId === currentUser.uid) remove(ref(db, "posts/" + id)); });
+            }, { once: true });
+            remove(ref(db, "users/" + currentUser.uid))
+                .then(() => firebaseDeleteUser(currentUser))
+                .then(() => { alert("✅ Profile deleted!"); window.location.href = "login.html"; })
+                .catch(err => { alert("เกิดข้อผิดพลาด: " + err.message); });
+        });
+
+        // load posts by current user
+        function loadUserPosts() {
+            onValue(ref(db, "posts/"), snapshot => {
+                const posts = snapshot.val();
+                allUserPosts = posts ? Object.entries(posts).reverse().filter(([id, post]) => post.userId === currentUser.uid) : [];
+                renderUserPosts(allUserPosts);
+            });
+        }
+
+        function renderUserPosts(posts) {
+            userPosts.innerHTML = "";
+            if (!posts || posts.length === 0) {
+                userPosts.innerHTML = `<p class="text-center text-muted">คุณยังไม่มีโพสต์</p>`; return;
+            }
+            posts.forEach(([id, post]) => {
+                const commentsCount = post.comments ? Object.keys(post.comments).length : 0;
+                const reactionsCount = post.reactions ? Object.keys(post.reactions).length : 0;
+
+                let mediaHTML = "";
+                if (post.imageURL) mediaHTML += `<img src="${post.imageURL}" class="card-img-top" onerror="this.src='https://via.placeholder.com/600x300?text=No+Image'">`;
+                if (post.videoURL) mediaHTML += `<div class="ratio ratio-16x9 mb-2"><iframe src="${convertToEmbed(post.videoURL)}" allowfullscreen></iframe></div>`;
+
+                userPosts.innerHTML += `
+<div class="col-12">
+  <div class="card shadow-sm">
+    ${mediaHTML}
+    <div class="card-body">
+      <h5 class="card-title">${escapeHtml(post.title)}</h5>
+      <p class="card-text">${escapeHtml(post.content)}</p>
+      <div class="d-flex align-items-center mb-2">
+        <img src="${userData[currentUser.uid]?.photoURL || 'https://via.placeholder.com/30'}" class="rounded-circle me-2" width="30" height="30">
+        <span class="text-muted small">Posted by <strong>${userData[currentUser.uid]?.name || currentUser.email}</strong> on ${post.date}</span>
+      </div>
+      <div class="d-flex mb-2">
+        <button class="btn btn-sm btn-outline-primary me-2" onclick="toggleReaction('${id}')">👍 Like (${reactionsCount})</button>
+        <span class="ms-2">💬 ${commentsCount} comments</span>
+      </div>
+      <div class="mb-2">
+        <input type="text" id="commentInput-${id}" class="form-control form-control-sm mb-1" placeholder="Write a comment...">
+        <button class="btn btn-sm btn-success" onclick="addComment('${id}')">Comment</button>
+      </div>
+      <div id="comments-${id}"></div>
+      <button class="btn btn-sm btn-danger mt-2" onclick="deletePost('${id}')">Delete Post</button>
+    </div>
+  </div>
+</div>`;
+                loadComments(id);
+            });
+        }
+
+        // helpers reuse (convertToEmbed + escapeHtml)
+        function convertToEmbed(url) {
+            try {
+                if (!url) return "";
+                const u = url.trim();
+                const ytMatch = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+                if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+                return u;
+            } catch (e) { return url; }
+        }
+        function escapeHtml(s) { if (!s) return ""; return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
+
+        // create post
+        createPostBtn.addEventListener("click", () => {
+            const title = postTitle.value.trim();
+            const content = postContent.value.trim();
+            const imageURL = postImage.value.trim();
+            const videoURL = postVideo.value.trim();
+            if (!title || !content) return alert("กรุณากรอกหัวข้อและเนื้อหาโพสต์");
+            const newPost = push(ref(db, "posts/"));
+            set(newPost, {
+                title, content,
+                imageURL: imageURL || null,
+                videoURL: videoURL || null,
+                date: new Date().toLocaleString(),
+                userId: currentUser.uid
+            }).then(() => {
+                postTitle.value = ""; postContent.value = ""; postImage.value = ""; postVideo.value = "";
+                loadUserPosts();
+            });
+        });
+
+        // reaction + comments + deletePost (similar to index)
+        window.toggleReaction = (postId) => {
+            const reactionRef = ref(db, `posts/${postId}/reactions/${currentUser.uid}`);
+            onValue(reactionRef, snap => { if (snap.exists()) remove(reactionRef); else set(reactionRef, true); }, { once: true });
+        }
+        window.addComment = (postId) => {
+            const input = document.getElementById(`commentInput-${postId}`);
+            const text = input.value.trim();
+            if (!text) return alert("กรุณาใส่ข้อความก่อนคอมเมนต์");
+            const newCommentRef = push(ref(db, `posts/${postId}/comments`));
+            set(newCommentRef, { userId: currentUser.uid, text, date: new Date().toLocaleString() }).then(() => input.value = "");
+        }
+        function loadComments(postId) {
+            const commentsRef = ref(db, `posts/${postId}/comments`);
+            onValue(commentsRef, snapshot => {
+                const container = document.getElementById(`comments-${postId}`);
+                container.innerHTML = "";
+                const comments = snapshot.val();
+                if (comments) Object.entries(comments).forEach(([id, c]) => {
+                    const name = userData[c.userId]?.name || c.userId;
+                    const photo = userData[c.userId]?.photoURL || "https://via.placeholder.com/30";
+                    const canEdit = (c.userId === currentUser.uid);
+                    container.innerHTML += `
+<div class="mb-1 d-flex align-items-center">
+  <img src="${photo}" class="rounded-circle me-2" width="25" height="25">
+  <strong>${escapeHtml(name)}</strong>: <span id="commentText-${id}">${escapeHtml(c.text)}</span>
+  <span class="text-muted small ms-2">(${c.date})</span>
+  ${canEdit ? `<button class="btn btn-sm btn-outline-warning ms-2" onclick="editComment('${postId}','${id}')">Edit</button>
+  <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteComment('${postId}','${id}')">Delete</button>` : ""}
+</div>`;
+                });
+            });
+        }
+        window.editComment = (postId, commentId) => {
+            const textEl = document.getElementById(`commentText-${commentId}`);
+            const newText = prompt("แก้ไขคอมเมนต์:", textEl.textContent);
+            if (newText === null) return;
+            update(ref(db, `posts/${postId}/comments/${commentId}`), { text: newText });
+        }
+        window.deleteComment = (postId, commentId) => {
+            if (confirm("คุณแน่ใจที่จะลบคอมเมนต์นี้?")) remove(ref(db, `posts/${postId}/comments/${commentId}`));
+        }
+
+        window.deletePost = (id) => {
+            if (confirm("คุณแน่ใจที่จะลบโพสต์นี้?")) remove(ref(db, "posts/" + id));
+        }
+
+        // logout
+        logoutBtn.addEventListener("click", () => {
+            update(ref(db, "users/" + currentUser.uid), { lastLogout: new Date().toLocaleString() })
+                .then(() => signOut(auth).then(() => window.location.href = "login.html"));
+        });
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

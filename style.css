@@ -1,0 +1,29 @@
+/* style.css */
+body {
+    padding-top: 70px;
+}
+
+.navbar-brand {
+    font-weight: 700;
+}
+
+.card-img-top {
+    max-height: 300px;
+    object-fit: cover;
+}
+
+.post-card {
+    margin-bottom: 1rem;
+}
+
+.ad-box {
+    border: 2px dashed #ccc;
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.comment {
+    margin-left: 1rem;
+    font-size: 0.9rem;
+}

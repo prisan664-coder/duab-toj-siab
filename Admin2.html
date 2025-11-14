@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hukhujai App - Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        table {
+            font-size: 0.9rem;
+        }
+
+        thead th {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">💙 Hukhujai Admin</a>
+            <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span
+                    class="navbar-toggler-icon"></span></button>
+            <div id="navbarNav" class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="#">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="index.html">User View</a></li>
+                     <li class="nav-item"><a class="nav-link" href="admin.html">Back to Admin</a></li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="#" id="logoutBtn">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4 mb-5">
+        <h2 class="text-primary mb-4">Admin Dashboard</h2>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <h4>🔥 Top Posts (ล่าสุด)</h4>
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Owner</th>
+                            <th>Likes</th>
+                            <th>Comments</th>
+                            <th>Reports</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topPostsTable"></tbody>
+                </table>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <h4>🌟 Top Users (ล่าสุด)</h4>
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Likes</th>
+                            <th>Comments</th>
+                            <th>Searches</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topUsersTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 mb-4">
+                <h4>🔍 Top Searches</h4>
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Keyword</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topSearchesTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 mb-4">
+                <h4>📣 Notifications (ล่าสุด)</h4>
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Message</th>
+                            <th>Post</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="notificationsTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCE_qqKanTTdVXYwBMBIfPu0M0Xy-kbX8",
+            authDomain: "hujai-web.firebaseapp.com",
+            databaseURL: "https://hujai-web-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "hujai-web",
+            storageBucket: "hujai-web.firebasestorage.app",
+            messagingSenderId: "827968973337",
+            appId: "1:827968973337:web:ae6ef630b59cf429575888",
+            measurementId: "G-XCF3TBNG8L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+
+        const topPostsTable = document.getElementById("topPostsTable");
+        const topUsersTable = document.getElementById("topUsersTable");
+        const topSearchesTable = document.getElementById("topSearchesTable");
+        const notificationsTable = document.getElementById("notificationsTable");
+        const logoutBtn = document.getElementById("logoutBtn");
+
+        let usersCache = {};
+        let postsCache = {};
+
+        // Load users
+        onValue(ref(db, "users/"), snap => { usersCache = snap.val() || {}; });
+
+        // Load posts
+        onValue(ref(db, "posts/"), snap => { postsCache = snap.val() || {}; });
+
+        // Auth check
+        onAuthStateChanged(auth, user => {
+            if (!user) { window.location.href = "login.html"; return; }
+        });
+
+        // Logout
+        logoutBtn.addEventListener("click", () => { signOut(auth).then(() => window.location.href = "login.html"); });
+
+        // Top Posts - แสดงชื่อโพสต์ + เจ้าของ + เรียงล่าสุด
+        onValue(ref(db, "posts/"), snap => {
+            const posts = snap.val() || {};
+            const arr = [];
+            Object.entries(posts).forEach(([pid, p]) => {
+                const likes = p.reactions ? Object.keys(p.reactions).length : 0;
+                const comments = p.comments ? Object.keys(p.comments).length : 0;
+                const reports = p.reports ? Object.keys(p.reports).length : 0;
+                const ownerName = usersCache[p.userId]?.name || "Anonymous";
+                const date = p.date || "Unknown";
+                arr.push({ pid, title: p.title || "Untitled", ownerName, likes, comments, reports, date });
+            });
+            // เรียงตามวันที่ล่าสุด
+            arr.sort((a, b) => new Date(b.date) - new Date(a.date));
+            topPostsTable.innerHTML = "";
+            arr.slice(0, 10).forEach(p => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${p.title}</td><td>${p.ownerName}</td><td>${p.likes}</td><td>${p.comments}</td><td>${p.reports}</td>`;
+                topPostsTable.appendChild(tr);
+            });
+        });
+
+        // Top Users - เรียงตาม activity ล่าสุด
+        onValue(ref(db, "userInteractions/"), snap => {
+            const data = snap.val() || {};
+            const arr = [];
+            Object.entries(data).forEach(([uid, types]) => {
+                const likes = types.likes ? Object.keys(types.likes).length : 0;
+                const comments = types.comments ? Object.keys(types.comments).length : 0;
+                const searches = types.searches ? Object.keys(types.searches).length : 0;
+                const lastActive = types.lastActive || 0;
+                arr.push({ uid, name: usersCache[uid]?.name || "Anonymous", likes, comments, searches, lastActive });
+            });
+            arr.sort((a, b) => b.lastActive - a.lastActive);
+            topUsersTable.innerHTML = "";
+            arr.slice(0, 10).forEach(u => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${u.name}</td><td>${u.likes}</td><td>${u.comments}</td><td>${u.searches}</td>`;
+                topUsersTable.appendChild(tr);
+            });
+        });
+
+        // Top Searches
+        onValue(ref(db, "userInteractions/"), snap => {
+            const data = snap.val() || {};
+            const keywords = {};
+            Object.values(data).forEach(types => {
+                if (types.searches) Object.keys(types.searches).forEach(k => {
+                    keywords[k] = (keywords[k] || 0) + 1;
+                });
+            });
+            const sorted = Object.entries(keywords).sort((a, b) => b[1] - a[1]);
+            topSearchesTable.innerHTML = "";
+            sorted.slice(0, 10).forEach(([k, c]) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${k}</td><td>${c}</td>`;
+                topSearchesTable.appendChild(tr);
+            });
+        });
+
+        // Notifications - แสดงชื่อผู้ใช้ + ชื่อโพสต์ + ข้อความ + ล่าสุด 15 รายการ
+        onValue(ref(db, "notifications/"), snap => {
+            const data = snap.val() || {};
+            const notifArr = [];
+            Object.entries(data).forEach(([uid, notifs]) => {
+                Object.entries(notifs).forEach(([nid, n]) => {
+                    const userName = usersCache[uid]?.name || "Anonymous";
+                    const postTitle = n.postId ? (postsCache[n.postId]?.title || n.postId) : "-";
+                    const date = n.date || "-";
+                    notifArr.push({ userName, postTitle, message: n.message, date });
+                });
+            });
+            notifArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+            notificationsTable.innerHTML = "";
+            notifArr.slice(0, 15).forEach(n => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${n.userName}</td><td>${n.message}</td><td>${n.postTitle}</td><td>${n.date}</td>`;
+                notificationsTable.appendChild(tr);
+            });
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

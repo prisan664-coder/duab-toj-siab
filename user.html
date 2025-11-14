@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hukhujai - User Profile</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="index.html">💙 Hukhujai App</a>
+            <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span
+                    class="navbar-toggler-icon"></span></button>
+            <div id="navbarNav" class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="index.html">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="profile.html">Profile</a></li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" id="logoutBtn" href="#">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <header class="bg-white py-4 shadow-sm text-center">
+        <div>
+            <img id="profilePic" src="https://via.placeholder.com/100" class="rounded-circle mb-2" width="100"
+                height="100">
+            <h3 id="profileName">User</h3>
+            <p id="bioText" class="small text-muted"></p>
+        </div>
+    </header>
+
+    <main class="container my-4">
+        <h4 class="fw-bold text-primary mb-3">Posts by this user</h4>
+        <div id="userPosts" class="row gy-4"></div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCE_qqKanTTdVXYwBMBIfPu0M0Xy-kbX8",
+            authDomain: "hujai-web.firebaseapp.com",
+            databaseURL: "https://hujai-web-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "hujai-web",
+            storageBucket: "hujai-web.firebasestorage.app",
+            messagingSenderId: "827968973337",
+            appId: "1:827968973337:web:ae6ef630b59cf429575888",
+            measurementId: "G-XCF3TBNG8L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+
+        const params = new URLSearchParams(window.location.search);
+        const viewedUid = params.get("uid"); // uid of profile to view
+        const profilePic = document.getElementById("profilePic");
+        const profileName = document.getElementById("profileName");
+        const bioText = document.getElementById("bioText");
+        const userPosts = document.getElementById("userPosts");
+        const logoutBtn = document.getElementById("logoutBtn");
+
+        let currentUser = null;
+        onAuthStateChanged(auth, u => {
+            if (!u) window.location.href = "login.html";
+            currentUser = u;
+            // mark lastLogin of current user
+            const { update } = awaitImportUpdate();
+            update(ref(db, "users/" + currentUser.uid), { lastLogin: new Date().toLocaleString() });
+            if (!viewedUid) { alert("UID ผู้ใช้ไม่ถูกต้อง"); window.location.href = "index.html"; return; }
+            loadProfile(viewedUid);
+            loadUserPosts(viewedUid);
+        });
+
+        async function awaitImportUpdate() {
+            // small helper to import update function (already loaded earlier in other pages)
+            const module = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js");
+            return { update: module.update, ref: module.ref };
+        }
+
+        function loadProfile(uid) {
+            onValue(ref(db, "users/" + uid), snapshot => {
+                const d = snapshot.val();
+                if (!d) { profileName.textContent = "ไม่พบผู้ใช้"; return; }
+                profileName.textContent = d.name || d.email;
+                profilePic.src = d.photoURL || "https://via.placeholder.com/100";
+                bioText.textContent = d.bio || "";
+            });
+        }
+
+        function loadUserPosts(uid) {
+            onValue(ref(db, "posts/"), snapshot => {
+                const posts = snapshot.val();
+                const list = posts ? Object.entries(posts).reverse().filter(([id, p]) => p.userId === uid) : [];
+                userPosts.innerHTML = "";
+                if (!list || list.length === 0) { userPosts.innerHTML = `<p class="text-center text-muted">ยังไม่มีโพสต์จากผู้ใช้นี้</p>`; return; }
+                list.forEach(([id, p]) => {
+                    let mediaHTML = '';
+                    if (p.imageURL) mediaHTML += `<img src="${p.imageURL}" class="card-img-top" onerror="this.src='https://via.placeholder.com/600x300?text=No+Image'">`;
+                    if (p.videoURL) mediaHTML += `<div class="ratio ratio-16x9 mb-2"><iframe src="${convertToEmbed(p.videoURL)}" allowfullscreen></iframe></div>`;
+                    userPosts.innerHTML += `
+<div class="col-12">
+  <div class="card shadow-sm">
+    ${mediaHTML}
+    <div class="card-body">
+      <h5 class="card-title">${escapeHtml(p.title)}</h5>
+      <p class="card-text">${escapeHtml(p.content)}</p>
+      <div class="text-muted small">Posted on ${p.date}</div>
+    </div>
+  </div>
+</div>`;
+                });
+            });
+        }
+
+        function convertToEmbed(url) {
+            try {
+                if (!url) return "";
+                const u = url.trim();
+                const ytMatch = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+                if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+                return url;
+            } catch (e) { return url; }
+        }
+        function escapeHtml(s) { if (!s) return ""; return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
+
+        // logout
+        logoutBtn.addEventListener("click", () => {
+            update(ref(db, "users/" + currentUser.uid), { lastLogout: new Date().toLocaleString() })
+                .then(() => signOut(auth).then(() => window.location.href = "login.html"));
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
